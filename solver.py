@@ -3,6 +3,36 @@ import json
 import re
 from time import time
 
+#faster expression building - adapted in part from
+#https://github.com/obijywk/grilops/blob/master/grilops/fastz3.py
+from z3 import BoolRef, main_ctx
+from z3.z3core import Z3_mk_and, Z3_mk_or, Z3_mk_not
+from z3.z3types import Ast
+
+CTX = main_ctx()
+CTX_REF = CTX.ref()
+
+def fastAnd(*args):
+    sz = len(args)
+    z3args = (Ast * sz)()
+    for i, x in enumerate(args):
+        z3args[i] = x.as_ast()
+    return BoolRef(Z3_mk_and(CTX_REF, sz, z3args),CTX)
+
+def fastOr(*args):
+    sz = len(args)
+    z3args = (Ast * sz)()
+    for i, x in enumerate(args):
+        z3args[i] = x.as_ast()
+    return BoolRef(Z3_mk_or(CTX_REF, sz, z3args),CTX)
+
+def fastNot(arg):
+    return BoolRef(Z3_mk_not(CTX_REF, arg.as_ast()),CTX)
+
+And = fastAnd
+Or = fastOr
+Not = fastNot
+
 class Puzzle():
     def __init__(self, data):
         self.metadata = data

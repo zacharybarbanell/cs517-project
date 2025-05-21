@@ -6,7 +6,7 @@ from time import time
 class Puzzle():
     def __init__(self, data):
         self.metadata = data
-        if not re.match('^shakashaka/\d+/\d+/[a-eg-z\.\d]+/?$',data['pzv']):
+        if not re.match('^shakashaka/\\d+/\\d+/[a-eg-z\\.\\d]+/?$',data['pzv']):
             raise ValueError(f"Bad data: {repr(data['pzv'])}")
         _, w, h, content, *_ = data['pzv'].split('/')
         w = int(w)
@@ -160,10 +160,10 @@ class Puzzle():
         self.instance = And(clauses)
 
     def solve(self):
-        if not is_sat(self.instance):
+        if not is_sat(self.instance, "z3"):
             raise ValueError("Unsolvable Puzzle")
         else:
-            self.solution = get_model(self.instance)
+            self.solution = get_model(self.instance, "z3")
 
     def solved_grid(self):
         def get_symbol(x,y):

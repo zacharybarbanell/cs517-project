@@ -1,7 +1,7 @@
 from z3 import Solver, Bool, And, Or, Not, sat
 import json
 import re
-from time import time
+from tqdm import tqdm
 
 #faster expression building - adapted in part from
 #https://github.com/obijywk/grilops/blob/master/grilops/fastz3.py
@@ -223,54 +223,25 @@ class Puzzle():
         )
 
 puzzles = []
+def main():
+    errors = 0
 
-print('Loading puzzle data.')
+    with open("pzvs_anon.json") as f:
+        for line in json.loads(f.read()):
+            try:
+                puzzles.append(Puzzle(line))
+            except ValueError:
+                errors += 1
 
-t1 = time()
+    print(f'Data successfully loaded for {len(puzzles)}/{len(puzzles)+errors} puzzles.')
 
-with open("pzvs_anon.json") as f:
-    for line in json.loads(f.read()):
-        try:
-            puzzles.append(Puzzle(line))
-        except ValueError as e:
-            print(e)
+    for p in tqdm(puzzles, 'Generating SAT instances'):
+        p.gen_sat_instance()
 
-t2 = time()
+    for p in tqdm(puzzles, 'Solving puzzles'):
+        p.solve()
 
-print(f'Puzzle data loaded for {len(puzzles)} puzzles in {t2-t1} seconds.')
+    print('Puzzles solved!')
 
-print('Generating SAT instances.')
-
-t1 = time()
-
-for p in puzzles:
-    p.gen_sat_instance()
-
-t2 = time()
-
-print(f'SAT instances generated in {t2-t1} seconds.')
-
-print('Solving puzzles.')
-
-t1 = time()
-
-for p in puzzles:
-    p.solve()
-
-t2 = time()
-
-print(f'Puzzles solved in {t2-t1} seconds.')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+if __name__ == "__main__":
+    main()

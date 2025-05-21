@@ -1,4 +1,4 @@
-from pysmt.shortcuts import Symbol, And, Or, Not, is_sat, get_model
+from z3 import Solver, Bool, And, Or, Not, sat
 import json
 import re
 from time import time
@@ -6,7 +6,7 @@ from time import time
 class Puzzle():
     def __init__(self, data):
         self.metadata = data
-        if not re.match('^shakashaka/\\d+/\\d+/[a-eg-z\\.\\d]+/?$',data['pzv']):
+        if not re.match(r'^shakashaka/\d+/\d+/[a-eg-z\.\d]+/?$',data['pzv']):
             raise ValueError(f"Bad data: {repr(data['pzv'])}")
         _, w, h, content, *_ = data['pzv'].split('/')
         w = int(w)
@@ -53,7 +53,7 @@ class Puzzle():
             for y in range(-1,h+1):
                 pfx = f'{x}_{y}_'
                 for d in dirs:
-                    symbols[x,y,d] = Symbol(pfx + d)
+                    symbols[x,y,d] = Bool(pfx + d)
                 if x == -1 or y == -1 or x == w or y == h or self.data[y][x] is not None:
                     for d in dirs:
                         clauses.append(symbols[x,y,d])
@@ -157,21 +157,22 @@ class Puzzle():
                         case _:
                             raise ValueError("Clue too large")
         self.symbols = symbols
-        self.instance = And(clauses)
+        self.clauses = clauses
 
     def solve(self):
-        if not is_sat(self.instance, "z3"):
+        s = Solver()
+        s.add(self.clauses)
+        if not s.check() == sat:
             raise ValueError("Unsolvable Puzzle")
-        else:
-            self.solution = get_model(self.instance, "z3")
+        self.solution = s.model()
 
     def solved_grid(self):
         def get_symbol(x,y):
-            a,b,c,d = self.solution.get_py_value(self.symbols[x,y,'N']), \
-                    self.solution.get_py_value(self.symbols[x,y,'E']), \
-                    self.solution.get_py_value(self.symbols[x,y,'S']), \
-                    self.solution.get_py_value(self.symbols[x,y,'W'])
-            match (a,b,c,d):
+            a,b,c,d = self.solution[self.symbols[x,y,'N']], \
+                    self.solution[self.symbols[x,y,'E']], \
+                    self.solution[self.symbols[x,y,'S']], \
+                    self.solution[self.symbols[x,y,'W']]
+            match (a.py_value(),b.py_value(),c.py_value(),d.py_value()):
                 case (True,True,False,False):
                     return '◥'
                 case (False,True,True,False):

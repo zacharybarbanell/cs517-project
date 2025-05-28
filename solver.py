@@ -2,6 +2,7 @@ from z3 import Solver, Bool, And, Or, Not, sat
 import json
 import re
 from tqdm import tqdm
+from random import shuffle
 
 #faster expression building - adapted in part from
 #https://github.com/obijywk/grilops/blob/master/grilops/fastz3.py
@@ -241,7 +242,36 @@ def main():
     for p in tqdm(puzzles, 'Solving puzzles'):
         p.solve()
 
-    print('Puzzles solved!')
+    bad_puzzles = []
+
+    for p in tqdm(puzzles, 'Finding puzzles with broken solutions'):
+        if not p.solution.eval(And(*p.clauses)).py_value():
+            bad_puzzles.append(p)
+
+    for _ in range(5):
+        if len(bad_puzzles) == 0:
+            break
+        print(f'{len(bad_puzzles)} puzzles with broken solutions found.')
+        bpp = []
+        for p in tqdm(bad_puzzles, 'Re-solving puzzles with broken solutions'):
+            shuffle(p.clauses) #for some reason this fixes bad output from z3
+            p.solve()
+            if not p.solution.eval(And(*p.clauses)).py_value():
+                bpp.append(p)
+        bad_puzzles = bpp
+
+    if len(bad_puzzles) > 0:
+        print('Failed to fix all broken puzzles, aborting.')
+        for p in bad_puzzles:
+            print(p.metadata)
+        return
+
+    with open('solutions_out.txt','wb') as f:
+        for p in tqdm(puzzles, 'Writing solutions to file'):
+            f.write(bytes(str(p.metadata),'utf8'))
+            f.write(b'\n')
+            f.write(bytes(p.solved_grid(),'utf8'))
+            f.write(b'\n\n')
 
 if __name__ == "__main__":
     main()

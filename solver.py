@@ -30,14 +30,19 @@ def fastOr(*args):
 def fastNot(arg):
     return BoolRef(Z3_mk_not(CTX_REF, arg.as_ast()),CTX)
 
+#these speed up expression generation by a factor of nearly ten
 And = fastAnd
 Or = fastOr
 Not = fastNot
 
 class Puzzle():
     def __init__(self, data):
+        #store JSON data for output and debugging purposes
         self.metadata = data
+        #parse puzzle data - based on parser used by puzz.link/pzv.jp frontend
+        #https://github.com/sabo2/pzprjs/blob/master/src/variety-common/Encode.js#L17
         if not re.match(r'^shakashaka/\d+/\d+/[a-eg-z\.\d]+/?$',data['pzv']):
+            #throw out weird puzzle data (seems to mostly be typos)
             raise ValueError(f"Bad data: {repr(data['pzv'])}")
         _, w, h, content, *_ = data['pzv'].split('/')
         w = int(w)
@@ -48,6 +53,7 @@ class Puzzle():
         head = 0
         def write(v):
             if head >= w*h:
+                #more weird puzzle data
                 raise ValueError(f"Data too long: {repr(data['pzv'])}")
             self.data[head//w][head%w] = v
         for c in content:
@@ -64,10 +70,12 @@ class Puzzle():
             elif c == '.':
                 write(-1)
             else:
-                assert(False) #unreachable
+                #unreachable by earlier regex
+                assert(False)
             head += 1
 
     def __str__(self):
+        #pretty-prints puzzle in a grid (only really works with some monospace fonts)
         lookup = {None: '.', -1: '■', 0: '0', 1: '1', 2: '2', 3: '3', 4: '4'}
         return '\n'.join(
             ''.join(
@@ -80,16 +88,22 @@ class Puzzle():
         clauses = []
         dirs = 'NESW'
         w,h = self.w,self.h
+        #iteration goes from -1 to w/h, including cells one space outside of the grid
+        #to enable systematic handling of boundary verticies
         for x in range(-1,w+1):
             for y in range(-1,h+1):
                 pfx = f'{x}_{y}_'
                 for d in dirs:
+                    #create one symbol per space per direction
                     symbols[x,y,d] = Bool(pfx + d)
                 if x == -1 or y == -1 or x == w or y == h or self.data[y][x] is not None:
+                    #if cell is outside the grid or cell has a clue
                     for d in dirs:
+                        #require all four quadrants to be shaded
                         clauses.append(symbols[x,y,d])
                 else:
                     s1, s2, s3, s4 = (symbols[x,y,d] for d in dirs)
+                    #for unclued cells, either two adjacent quadrants should be shaded, or nothing should be
                     clauses.append(
                         Or(
                             And(s1,s2,Not(s3),Not(s4)),
@@ -99,13 +113,16 @@ class Puzzle():
                             And(Not(s1),Not(s2),Not(s3),Not(s4))
                         )
                     )
+        #for each vertex
         for x in range(w+1):
             for y in range(h+1):
+                #adjacent 8 quadrants, in a cyclic order
                 s = [symbols[  x,  y,'N'], symbols[  x,  y,'W'],
                      symbols[x-1,  y,'E'], symbols[x-1,  y,'N'],
                      symbols[x-1,y-1,'S'], symbols[x-1,y-1,'E'],
                      symbols[  x,y-1,'W'], symbols[  x,y-1,'S']]
                 for i in range(8):
+                    #disallow 45 degree angles
                     clauses.append(
                         Not(
                             And(
@@ -115,6 +132,7 @@ class Puzzle():
                             )
                         )
                     )
+                    #disallow 135 degree angles
                     clauses.append(
                         Not(
                             And(
@@ -126,6 +144,7 @@ class Puzzle():
                             )
                         )
                     )
+                    #disallow 225-315 degree angles
                     clauses.append(
                         Not(
                             And(
@@ -140,13 +159,17 @@ class Puzzle():
                     )
         for x in range(w):
             for y in range(h):
+                #if cell contains a number clue
                 if self.data[y][x] in (0,1,2,3,4):
+                    #adjust clue number to account for adjacent fully shaded cells
                     clue = self.data[y][x] + \
                            (x == 0 or self.data[y][x-1] is not None) + \
                            (x == w-1 or self.data[y][x+1] is not None) + \
                            (y == 0 or self.data[y-1][x] is not None) + \
                            (y == h-1 or self.data[y+1][x] is not None)
+                    #quadrants of adjacent cells that touch this cell
                     s1,s2,s3,s4 = symbols[x-1,y,'E'],symbols[x,y-1,'S'],symbols[x+1,y,'W'],symbols[x,y+1,'N']
+                    #require exactly (adjusted clue #) touching quadrants to be shaded
                     match clue:
                         case 0:
                             clauses.append(
@@ -186,6 +209,7 @@ class Puzzle():
                                 And(s1,s2,s3,s4)
                             )
                         case _:
+                            #trivially unsatisfiable clues like a 4 in a corner
                             raise ValueError("Clue too large")
         self.symbols = symbols
         self.clauses = clauses
@@ -198,6 +222,7 @@ class Puzzle():
         self.solution = s.model()
 
     def solved_grid(self):
+        #pretty print solution in a grid
         def get_symbol(x,y):
             a,b,c,d = self.solution[self.symbols[x,y,'N']], \
                     self.solution[self.symbols[x,y,'E']], \
@@ -215,6 +240,7 @@ class Puzzle():
                 case (False,False,False,False):
                     return ' '
                 case _:
+                    #illegally filled cells (e.g. only one quadrant filled or fully shaded open cell)
                     raise ValueError(f"Malformed solution data: {x,y,(a,b,c,d)}")
         lookup = {-1: '■', 0: '0', 1: '1', 2: '2', 3: '3', 4: '4'}
         return '\n'.join(
@@ -227,6 +253,8 @@ puzzles = []
 def main():
     errors = 0
 
+    #data obtained from https://puzz.link/db/?type=shakashaka&variant=no
+    #using an undocumented but public API to get the full JSON data for all puzzles matching those conditions
     with open("pzvs_anon.json") as f:
         for line in json.loads(f.read()):
             try:
@@ -244,17 +272,21 @@ def main():
 
     bad_puzzles = []
 
+    #Z3 occasionally outputs wrong solutions (despite correctly identifying the expressions as satisfiable)
+    #see https://github.com/Z3Prover/z3/issues/7658
     for p in tqdm(puzzles, 'Finding puzzles with broken solutions'):
         if not p.solution.eval(And(*p.clauses)).py_value():
             bad_puzzles.append(p)
 
+    #try a few times
     for _ in range(5):
         if len(bad_puzzles) == 0:
             break
         print(f'{len(bad_puzzles)} puzzles with broken solutions found.')
         bpp = []
         for p in tqdm(bad_puzzles, 'Re-solving puzzles with broken solutions'):
-            shuffle(p.clauses) #for some reason this fixes bad output from z3
+            #for some reason changing clause order has a good chance to fix them
+            shuffle(p.clauses)
             p.solve()
             if not p.solution.eval(And(*p.clauses)).py_value():
                 bpp.append(p)
@@ -272,6 +304,8 @@ def main():
             f.write(b'\n')
             f.write(bytes(p.solved_grid(),'utf8'))
             f.write(b'\n\n')
+
+    print('Complete!')
 
 if __name__ == "__main__":
     main()

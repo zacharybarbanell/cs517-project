@@ -14,6 +14,15 @@ def main():
             times.append(time)
             sizes.append(size)
 
+    data = list(zip(sizes, times))
+    data.sort(key=lambda x: x[1])
+    print(data[-1])
+    data = data[:-1]
+
+
+
+    sizes, times = zip(*data)
+
 
     plt.title('Solving Time vs. Puzzle Size')
     plt.xlabel('Puzzle size (w*h)')
@@ -22,7 +31,7 @@ def main():
     plt.ylim(0, max(max(sizes), int(max(times))))
 
     plt.scatter(sizes, times)
-    plt.plot(np.unique(sizes), np.poly1d(np.polyfit(sizes, times, 1))(np.unique(sizes)))
+    plt.plot(np.unique(sizes), np.poly1d(np.polyfit(sizes, times, 1))(np.unique(sizes)), color="pink")
 
     plt.savefig('solving-times.png')
     plt.show()

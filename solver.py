@@ -1,3 +1,5 @@
+import time
+from collections import defaultdict
 from z3 import Solver, Bool, And, Or, Not, sat
 import json
 import re
@@ -251,6 +253,9 @@ class Puzzle():
 
 puzzles = []
 def main():
+    generation_times = defaultdict(list)
+    solving_times = defaultdict(list)
+
     errors = 0
 
     #data obtained from https://puzz.link/db/?type=shakashaka&variant=no
@@ -265,10 +270,26 @@ def main():
     print(f'Data successfully loaded for {len(puzzles)}/{len(puzzles)+errors} puzzles.')
 
     for p in tqdm(puzzles, 'Generating SAT instances'):
+        start = time.process_time()
         p.gen_sat_instance()
+        end = time.process_time()
+        generation_times[p.w * p.h].append(end - start)
+
+    with open("generation-times.txt", "w") as f:
+        for key in generation_times.keys():
+            avg = sum(generation_times[key])/len(generation_times[key])
+            f.write(f"{key},{avg}\n")
 
     for p in tqdm(puzzles, 'Solving puzzles'):
+        start = time.process_time()
         p.solve()
+        end = time.process_time()
+        solving_times[p.w * p.h].append(end - start)
+
+    with open("solving-times.txt", "w") as f:
+        for key in solving_times.keys():
+            avg = sum(solving_times[key])/len(solving_times[key])
+            f.write(f"{key},{avg}\n")
 
     bad_puzzles = []
 
